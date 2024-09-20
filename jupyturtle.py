@@ -5,6 +5,7 @@ small modifications for EN1211 by Daniel Gallichan, gallichand@cardiff.ac.uk
 """
 
 import math
+import numpy as np
 import sys
 import time
 from contextlib import contextmanager
@@ -33,7 +34,9 @@ DRAW_SVG = dedent(
 <svg width="{width}" height="{height}" style="fill:none; stroke-linecap:round;">
     <rect width="100%" height="100%" fill="{bgcolor}" />
 
+<g transform="translate({cx}, {cy})">
 {contents}
+</g>
 
 </svg>
 """
@@ -49,6 +52,8 @@ class Drawing:
 
     def get_SVG(self, contents):
         return DRAW_SVG.format(
+            cx=self.width//2, # DG
+            cy=self.height//2, # DG
             width=self.width,
             height=self.height,
             bgcolor=self.bgcolor,
@@ -66,8 +71,7 @@ class Point(NamedTuple):
 
 PATH_SVG = dedent(
     """
-   <path stroke="{color}" stroke-width="{width}" d="{path}" />'
-
+       <path stroke="{color}" stroke-width="{width}" d="{path}" />'
 """
 ).rstrip()
 
@@ -118,6 +122,19 @@ TURTLE_DELAY = 0.2  # pause after each visual command, in seconds
 PEN_COLOR = '#663399'  # rebeccapurple https://www.w3.org/TR/css-color-4/#valdef-color-rebeccapurple
 PEN_WIDTH = 4
 
+# DG:
+TYRE_RADIUS = 180
+HUB_RADIUS = 15
+TYRE_THICKNESS = 20
+
+WHEEL_SVG = dedent(
+    """
+    <g transform="translate({cx}, {cy})">
+        <circle cx="0" cy="0" r="{tyreRadius}" fill="transparent" stroke="black" stroke-width="{tyreThickness}" />
+        <circle cx="0" cy="0" r="{hubRadius}" fill="lightgrey" />
+    </g>        
+"""
+).rstrip()
 
 TURTLE_SVG = dedent(
     """
@@ -140,11 +157,15 @@ class Turtle:
         self.animate = animate
         self.delay = delay
         self.drawing = drawing if drawing else Drawing()
-        self.position = Point(self.drawing.width // 2, self.drawing.height // 2)
+        self.position = Point(0,0)
         self.heading = TURTLE_HEADING
         self.color = TURTLE_COLOR
         self.visible = True
         self.active_pen = True
+        self.drawWheel = False   # DG        
+        self.tyreRadius = TYRE_RADIUS    # DG
+        self.hubRadius = HUB_RADIUS      # DG
+        self.tyreThickness = TYRE_THICKNESS  # DG
         self.__pen_color = PEN_COLOR
         self.__pen_width = PEN_WIDTH
         self.paths: list[Path] = [
@@ -219,6 +240,16 @@ class Turtle:
 
     def get_SVG(self):
         svg = [path.get_SVG() for path in self.paths]
+        if self.drawWheel: ## DG
+            svg.append(
+                WHEEL_SVG.format(
+                    cx = 0,
+                    cy = 0,
+                    tyreRadius = self.tyreRadius,
+                    tyreThickness = self.tyreThickness,
+                    hubRadius = self.hubRadius,
+                )
+            )
         if self.visible:
             svg.append(
                 TURTLE_SVG.format(
@@ -229,6 +260,7 @@ class Turtle:
                     color=self.color,
                 )
             )
+
 
         return self.drawing.get_SVG('\n'.join(svg))
 
@@ -373,6 +405,47 @@ class Turtle:
             self.draw()
         self.animate = saved_animate
 
+    def forwardUntilRadius(self, radiusLimit: float): ## DG!
+        """Move the turtle forwards, but stop at the given radius"""
+        currentRadius = math.sqrt(self.x**2 + self.y**2)
+        if currentRadius > radiusLimit:
+            raise Exception("Turtle needs to start inside the given target radius")   
+        
+        if self.heading==0: # handle 0 and 180 manually as the tan operation breaks!
+            # y = const, moving right
+            yhit = self.y
+            xhit = math.sqrt(math.fabs(radiusLimit**2 - self.y**2))
+        elif self.heading==180:
+            # y = const, moving left
+            yhit = self.y
+            xhit = -math.sqrt(math.fabs(radiusLimit**2 - self.y**2))
+        else:            
+            A = math.tan((90-self.heading)*math.pi/180.0);
+            B = self.x - A*self.y;
+            
+            # solve quadratic equation for x where this crosses circle
+            rts = np.roots([1+A**2, 2*A*B, B**2-radiusLimit**2]) 
+            
+            if rts is not None and np.isrealobj(rts):            
+                if self.heading > 0 and self.heading < 180:           
+                    # take answer where y is greater than the current y
+                    yhit = float(rts[rts>self.y][0])
+                    xhit = A*yhit + B
+                elif self.heading > 180 and self.heading < 360:    
+                    # take answer where y is less than the current y
+                    yhit = float(rts[rts<self.y][0])
+                    xhit = A*yhit + B       
+        self.forward( math.sqrt( (xhit-self.x)**2 + (yhit-self.y)**2 ) )
+
+    def addWheel(self, newTyreRadius = TYRE_RADIUS, newHubRadius = HUB_RADIUS, newTyreThickness = TYRE_THICKNESS): ## DG!
+        self.drawWheel = True
+        self.tyreRadius = newTyreRadius
+        self.hubRadius = newHubRadius
+        self.tyreThickness = newTyreThickness
+        self.draw()
+
+            
+        
 
 
 ################################################## procedural API
