@@ -411,11 +411,11 @@ class Turtle:
         if currentRadius > radiusLimit:
             raise Exception("Turtle needs to start inside the given target radius")   
         
-        if self.heading==0: # handle 0 and 180 manually as the tan operation breaks!
+        if self.heading > 360 - 1e-4 or self.heading < 1e-4: # handle 0 and 180 manually as the tan operation breaks!
             # y = const, moving right
             yhit = self.y
             xhit = math.sqrt(math.fabs(radiusLimit**2 - self.y**2))
-        elif self.heading==180:
+        elif self.heading > 180 - 1e-4 and self.heading < 180 + 1e-4:
             # y = const, moving left
             yhit = self.y
             xhit = -math.sqrt(math.fabs(radiusLimit**2 - self.y**2))
